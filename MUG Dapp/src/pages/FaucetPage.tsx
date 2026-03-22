@@ -1,11 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AlertTriangle, CheckCircle2, Coins, Copy, ExternalLink, Github, Loader2, Moon, Radio, Send, ShieldCheck, Sparkles, Sun, TrendingDown, TrendingUp, Users, Wallet, Zap } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Coins, Copy, ExternalLink, Github, Loader2, Moon, Radio, Send, ShieldCheck, Sun, TrendingDown, TrendingUp, Users, Wallet, Zap } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { parseUnits } from 'viem'
 import { useAccount, usePublicClient, useSwitchChain, useWalletClient, useWriteContract } from 'wagmi'
+import logo from '../assets/logo.png'
 import { AnalyticsSection } from '../components/dashboard/AnalyticsSection'
 import { LiveActivityFeed } from '../components/dashboard/LiveActivityFeed'
 import { RecentTransactionsTable } from '../components/dashboard/RecentTransactionsTable'
@@ -491,10 +492,9 @@ export const FaucetPage = () => {
       <header className="sticky top-0 z-40 border-b border-border/60 bg-background/70 backdrop-blur-xl">
         <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 md:px-6">
           <a href="#top" className="inline-flex items-center gap-2 text-sm font-semibold tracking-wide text-foreground">
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
-              <Sparkles size={16} />
+            <span className="inline-flex h-10 w-35 items-center justify-center">
+              <img src={logo} alt="MUG Logo" className="h-10 w-30" />
             </span>
-            MUG Faucet
           </a>
 
           <div className="hidden items-center gap-5 text-sm text-muted-foreground md:flex">
