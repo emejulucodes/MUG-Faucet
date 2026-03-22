@@ -10,7 +10,7 @@ const ProvidersWithTheme = ({ children }: PropsWithChildren) => {
   const { theme } = useTheme()
 
   return (
-    <WagmiProvider config={wagmiConfig}>
+    <WagmiProvider config={wagmiConfig} reconnectOnMount={true}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider
           modalSize="compact"

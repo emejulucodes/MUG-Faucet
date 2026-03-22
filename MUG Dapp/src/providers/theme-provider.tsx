@@ -12,7 +12,14 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined)
 export const ThemeProvider = ({ children }: PropsWithChildren) => {
   const [theme, setTheme] = useState<Theme>(() => {
     const stored = localStorage.getItem('mug-theme')
-    return stored === 'dark' ? 'dark' : 'light'
+    if (stored) {
+      return stored === 'dark' ? 'dark' : 'light'
+    }
+    // Check system preference on first load
+    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return 'dark'
+    }
+    return 'light'
   })
 
   useEffect(() => {
