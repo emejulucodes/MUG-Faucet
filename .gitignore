@@ -1,7 +1,8 @@
 # Compiler files
 cache/
 out/
-lib/
+/lib/
+/MUG Contract/lib/
 artifacts/
 
 # Ignores development broadcast logs
