@@ -7,6 +7,8 @@ Full-stack Web3 project featuring:
 
 The project is configured to target **Lisk Sepolia (chainId 4202)** by default.
 
+Live dApp URL: https://claim-mug.vercel.app
+
 ## Project Structure
 
 ```text
