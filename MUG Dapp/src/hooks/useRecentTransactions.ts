@@ -5,6 +5,13 @@ import { CONTRACT_ADDRESS } from '../constants/contract'
 import { targetChain } from '../constants/wagmi'
 import type { FaucetTx } from '../types/faucet'
 
+const THIRTY_DAYS_IN_SECONDS = 30 * 24 * 60 * 60
+const BLOCK_TIME_SAMPLE_SIZE = 1000n
+const LOOKBACK_SAFETY_BUFFER = 1.25
+const LOG_BATCH_SIZE = 20_000n
+const MIN_LOOKBACK_BLOCKS = 5_000n
+const MAX_LOOKBACK_BLOCKS = 120_000n
+
 export const useRecentTransactions = () => {
   const publicClient = usePublicClient({ chainId: targetChain.id })
 
@@ -14,50 +21,97 @@ export const useRecentTransactions = () => {
       if (!publicClient) return []
 
       const latestBlock = await publicClient.getBlockNumber()
-      const fromBlock = latestBlock > 5000n ? latestBlock - 5000n : 0n
+      const sampleSize = latestBlock > BLOCK_TIME_SAMPLE_SIZE ? BLOCK_TIME_SAMPLE_SIZE : latestBlock
 
-      const [claimLogs, mintLogs, transferLogs] = await Promise.all([
-        publicClient.getLogs({
-          address: CONTRACT_ADDRESS,
-          event: {
-            type: 'event',
-            name: 'TokensClaimed',
-            inputs: [
-              { indexed: true, name: 'user', type: 'address' },
-              { indexed: false, name: 'amount', type: 'uint256' },
-            ],
-          },
-          fromBlock,
-          toBlock: 'latest',
-        }),
-        publicClient.getLogs({
-          address: CONTRACT_ADDRESS,
-          event: {
-            type: 'event',
-            name: 'TokensMinted',
-            inputs: [
-              { indexed: true, name: 'to', type: 'address' },
-              { indexed: false, name: 'amount', type: 'uint256' },
-            ],
-          },
-          fromBlock,
-          toBlock: 'latest',
-        }),
-        publicClient.getLogs({
-          address: CONTRACT_ADDRESS,
-          event: {
-            type: 'event',
-            name: 'Transfer',
-            inputs: [
-              { indexed: true, name: 'from', type: 'address' },
-              { indexed: true, name: 'to', type: 'address' },
-              { indexed: false, name: 'value', type: 'uint256' },
-            ],
-          },
-          fromBlock,
-          toBlock: 'latest',
-        }),
-      ])
+      let fromBlock = 0n
+      if (sampleSize > 0n) {
+        const sampledBlockNumber = latestBlock - sampleSize
+        const [latestBlockData, sampledBlockData] = await Promise.all([
+          publicClient.getBlock({ blockNumber: latestBlock }),
+          publicClient.getBlock({ blockNumber: sampledBlockNumber }),
+        ])
+
+        const secondsElapsed = Number(latestBlockData.timestamp - sampledBlockData.timestamp)
+        const safeSecondsPerBlock = Math.max(1, secondsElapsed / Number(sampleSize))
+        const estimatedLookbackBlocks = BigInt(
+          Math.ceil((THIRTY_DAYS_IN_SECONDS / safeSecondsPerBlock) * LOOKBACK_SAFETY_BUFFER),
+        )
+
+        const boundedLookbackBlocks =
+          estimatedLookbackBlocks < MIN_LOOKBACK_BLOCKS
+            ? MIN_LOOKBACK_BLOCKS
+            : estimatedLookbackBlocks > MAX_LOOKBACK_BLOCKS
+              ? MAX_LOOKBACK_BLOCKS
+              : estimatedLookbackBlocks
+
+        fromBlock = latestBlock > boundedLookbackBlocks ? latestBlock - boundedLookbackBlocks : 0n
+      }
+
+      const blockRanges: Array<{ fromBlock: bigint; toBlock: bigint }> = []
+      for (let startBlock = fromBlock; startBlock <= latestBlock; startBlock += LOG_BATCH_SIZE) {
+        const endBlock = startBlock + LOG_BATCH_SIZE - 1n
+        blockRanges.push({
+          fromBlock: startBlock,
+          toBlock: endBlock > latestBlock ? latestBlock : endBlock,
+        })
+      }
+
+      const claimLogs = []
+      const mintLogs = []
+      const transferLogs = []
+
+      for (const range of blockRanges) {
+        try {
+          const [claimBatch, mintBatch, transferBatch] = await Promise.all([
+            publicClient.getLogs({
+              address: CONTRACT_ADDRESS,
+              event: {
+                type: 'event',
+                name: 'TokensClaimed',
+                inputs: [
+                  { indexed: true, name: 'user', type: 'address' },
+                  { indexed: false, name: 'amount', type: 'uint256' },
+                ],
+              },
+              fromBlock: range.fromBlock,
+              toBlock: range.toBlock,
+            }),
+            publicClient.getLogs({
+              address: CONTRACT_ADDRESS,
+              event: {
+                type: 'event',
+                name: 'TokensMinted',
+                inputs: [
+                  { indexed: true, name: 'to', type: 'address' },
+                  { indexed: false, name: 'amount', type: 'uint256' },
+                ],
+              },
+              fromBlock: range.fromBlock,
+              toBlock: range.toBlock,
+            }),
+            publicClient.getLogs({
+              address: CONTRACT_ADDRESS,
+              event: {
+                type: 'event',
+                name: 'Transfer',
+                inputs: [
+                  { indexed: true, name: 'from', type: 'address' },
+                  { indexed: true, name: 'to', type: 'address' },
+                  { indexed: false, name: 'value', type: 'uint256' },
+                ],
+              },
+              fromBlock: range.fromBlock,
+              toBlock: range.toBlock,
+            }),
+          ])
+
+          claimLogs.push(...claimBatch)
+          mintLogs.push(...mintBatch)
+          transferLogs.push(...transferBatch)
+        } catch (error) {
+          console.warn('Skipping failed log range', range, error)
+        }
+      }
 
       const blockNumbers = new Set<bigint>()
       for (const log of [...claimLogs, ...mintLogs, ...transferLogs]) {
@@ -114,7 +168,6 @@ export const useRecentTransactions = () => {
 
       return [...claims, ...mints, ...transfers]
         .sort((a, b) => b.timestamp - a.timestamp)
-        .slice(0, 15)
     },
     refetchInterval: 20000,
   })
