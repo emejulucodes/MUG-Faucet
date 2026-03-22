@@ -1,4 +1,3 @@
-import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { Moon, Sun } from 'lucide-react'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
@@ -23,7 +22,7 @@ export const TopNavbar = ({ networkName, address }: TopNavbarProps) => {
         <Button variant="secondary" size="sm" onClick={toggleTheme}>
           {theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
         </Button>
-        <ConnectButton showBalance={false} chainStatus="icon" />
+        <appkit-button balance="hide" />
       </div>
     </header>
   )

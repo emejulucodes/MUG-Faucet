@@ -1,44 +1,11 @@
-import { getDefaultConfig } from '@rainbow-me/rainbowkit'
-import {
-  metaMaskWallet,
-  walletConnectWallet,
-  coinbaseWallet,
-  rainbowWallet,
-  trustWallet,
-  ledgerWallet,
-  uniswapWallet,
-  zerionWallet,
-  phantomWallet,
-  safeWallet,
-  braveWallet,
-  injectedWallet,
-  frameWallet,
-  okxWallet,
-  binanceWallet,
-  krakenWallet,
-  bybitWallet,
-  gateWallet,
-  bitgetWallet,
-  magicEdenWallet,
-  rabbyWallet,
-  safepalWallet,
-  talismanWallet,
-  coin98Wallet,
-  tokenPocketWallet,
-  oneKeyWallet,
-  foxWallet,
-  coreWallet,
-  backpackWallet,
-  enkryptWallet,
-  argentWallet,
-  mewWallet,
-  imTokenWallet,
-} from '@rainbow-me/rainbowkit/wallets'
+import { createAppKit } from '@reown/appkit/react'
+import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
 import { QueryClient } from '@tanstack/react-query'
 import { defineChain, http } from 'viem'
 
 const chainId = Number(import.meta.env.VITE_CHAIN_ID ?? 1)
 const rpcUrl = import.meta.env.VITE_RPC_URL ?? 'https://rpc.ankr.com/eth_sepolia'
+const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID ?? 'MUG_FAUCET_PROJECT_ID'
 
 export const targetChain = defineChain({
   id: chainId,
@@ -60,74 +27,30 @@ export const targetChain = defineChain({
   },
 })
 
-export const wagmiConfig = getDefaultConfig({
-  appName: 'MUG Faucet',
-  projectId: import.meta.env.VITE_WALLETCONNECT_PROJECT_ID ?? 'MUG_FAUCET_PROJECT_ID',
-  chains: [targetChain],
-  wallets: [
-    {
-      groupName: 'Popular',
-      wallets: [
-        metaMaskWallet,
-        rainbowWallet,
-        coinbaseWallet,
-        walletConnectWallet,
-        trustWallet,
-        phantomWallet,
-      ],
-    },
-    {
-      groupName: 'Hardware Wallets',
-      wallets: [
-        ledgerWallet,
-        safeWallet,
-      ],
-    },
-    {
-      groupName: 'Exchange Wallets',
-      wallets: [
-        binanceWallet,
-        okxWallet,
-        bybitWallet,
-        gateWallet,
-        krakenWallet,
-        bitgetWallet,
-      ],
-    },
-    {
-      groupName: 'DeFi & Trading',
-      wallets: [
-        uniswapWallet,
-        zerionWallet,
-        rabbyWallet,
-        magicEdenWallet,
-      ],
-    },
-    {
-      groupName: 'Other Wallets',
-      wallets: [
-        safepalWallet,
-        talismanWallet,
-        coin98Wallet,
-        tokenPocketWallet,
-        oneKeyWallet,
-        foxWallet,
-        coreWallet,
-        backpackWallet,
-        enkryptWallet,
-        argentWallet,
-        braveWallet,
-        frameWallet,
-        injectedWallet,
-        mewWallet,
-        imTokenWallet,
-      ],
-    },
-  ],
+const networks = [targetChain] as [typeof targetChain]
+
+const wagmiAdapter = new WagmiAdapter({
+  projectId,
+  networks,
+  ssr: false,
   transports: {
     [targetChain.id]: http(rpcUrl),
   },
-  ssr: false,
+})
+
+export const wagmiConfig = wagmiAdapter.wagmiConfig
+
+createAppKit({
+  adapters: [wagmiAdapter],
+  projectId,
+  networks,
+  defaultNetwork: targetChain,
+  metadata: {
+    name: 'MUG Faucet',
+    description: 'MUG token faucet and dashboard',
+    url: import.meta.env.VITE_APP_URL ?? 'http://localhost:5173',
+    icons: ['https://avatars.githubusercontent.com/u/179229932'],
+  },
 })
 
 export const queryClient = new QueryClient()

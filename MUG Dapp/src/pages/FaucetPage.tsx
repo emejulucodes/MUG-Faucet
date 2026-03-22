@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { ConnectButton } from '@rainbow-me/rainbowkit'
+import { useAppKit } from '@reown/appkit/react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AlertTriangle, CheckCircle2, Coins, Copy, ExternalLink, Github, Loader2, Moon, Radio, Send, ShieldCheck, Sun, TrendingDown, TrendingUp, Users, Wallet, Zap } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
@@ -86,6 +86,7 @@ const LoadingDots = () => {
 }
 
 export const FaucetPage = () => {
+  const { open } = useAppKit()
   const { address, isConnected } = useAccount()
   const publicClient = usePublicClient({ chainId: targetChain.id })
   const { data: walletClient } = useWalletClient()
@@ -585,7 +586,7 @@ export const FaucetPage = () => {
             <Button variant="secondary" size="sm" onClick={toggleTheme} aria-label="Toggle theme">
               {theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
             </Button>
-            <ConnectButton showBalance={false} chainStatus="icon" />
+            <appkit-button balance="hide" />
           </div>
         </div>
       </header>
@@ -608,33 +609,23 @@ export const FaucetPage = () => {
             </p>
 
             <div className="flex flex-wrap gap-3">
-              <ConnectButton.Custom>
-                {({ account, chain, mounted, openConnectModal, openChainModal }) => {
-                  const ready = mounted
-                  const connected = ready && account && chain
-                  const wrongChain = connected && chain.unsupported
-
-                  return (
-                    <Button
-                      size="lg"
-                      className="cta-pulse relative shadow-lg shadow-primary/30"
-                      onClick={() => {
-                        if (!connected) {
-                          openConnectModal()
-                          return
-                        }
-                        if (wrongChain) {
-                          openChainModal()
-                          return
-                        }
-                        void handleClaim()
-                      }}
-                    >
-                      {!connected ? 'Connect Wallet' : 'Claim Tokens'}
-                    </Button>
-                  )
+              <Button
+                size="lg"
+                className="cta-pulse relative shadow-lg shadow-primary/30"
+                onClick={() => {
+                  if (!isConnected) {
+                    void open({ view: 'Connect' })
+                    return
+                  }
+                  if (faucet.hasNetworkMismatch) {
+                    void open({ view: 'Networks' })
+                    return
+                  }
+                  void handleClaim()
                 }}
-              </ConnectButton.Custom>
+              >
+                {!isConnected ? 'Connect Wallet' : faucet.hasNetworkMismatch ? 'Switch Network' : 'Claim Tokens'}
+              </Button>
 
               <Button asChild variant="secondary" size="lg">
                 <a href="#transactions">Explore Activity</a>
@@ -773,7 +764,7 @@ export const FaucetPage = () => {
               <div className="space-y-4 rounded-2xl border border-dashed border-border bg-background/45 px-5 py-8 text-center">
                 <p className="text-muted-foreground">Connect your wallet to view your balance and claim status.</p>
                 <div className="flex justify-center">
-                  <ConnectButton />
+                  <appkit-button label="Connect Wallet" balance="hide" />
                 </div>
               </div>
             ) : faucet.isLoadingReads ? (
@@ -883,7 +874,7 @@ export const FaucetPage = () => {
                 <div className="space-y-4 rounded-2xl border border-dashed border-border bg-background/45 px-5 py-8 text-center">
                   <p className="text-muted-foreground">Connect your wallet to transfer tokens.</p>
                   <div className="flex justify-center">
-                    <ConnectButton />
+                    <appkit-button label="Connect Wallet" balance="hide" />
                   </div>
                 </div>
               ) : faucet.isLoadingReads ? (
@@ -1008,7 +999,7 @@ export const FaucetPage = () => {
                   <div className="space-y-4 rounded-2xl border border-dashed border-border bg-background/45 px-5 py-8 text-center">
                     <p className="text-muted-foreground">Connect your wallet to access minting.</p>
                     <div className="flex justify-center">
-                      <ConnectButton />
+                      <appkit-button label="Connect Wallet" balance="hide" />
                     </div>
                   </div>
                 ) : faucet.isLoadingReads ? (
@@ -1136,7 +1127,7 @@ export const FaucetPage = () => {
               { title: 'Fast Claims', body: 'Optimized transaction flow with responsive pending and confirmation states.', icon: Zap },
               { title: 'Secure Smart Contract', body: 'Direct contract interactions through wagmi, viem, and verified reads.', icon: ShieldCheck },
               { title: 'Real-time Data', body: 'Query polling keeps stats, transactions, and activity continuously fresh.', icon: Radio },
-              { title: 'Multi-wallet Support', body: 'RainbowKit connection UX for modern EVM wallets across devices.', icon: Wallet },
+              { title: 'Multi-wallet Support', body: 'AppKit connection UX for modern EVM wallets across devices.', icon: Wallet },
             ].map((feature, index) => (
               <motion.div
                 key={feature.title}
