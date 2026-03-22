@@ -1114,7 +1114,12 @@ export const FaucetPage = () => {
             />
           </div>
           <div className="xl:col-span-4">
-            <LiveActivityFeed transactions={transactions} isLoading={txQuery.isLoading} />
+            <LiveActivityFeed
+              transactions={transactions}
+              isLoading={txQuery.isLoading}
+              symbol={faucet.symbol}
+              decimals={faucet.decimals}
+            />
           </div>
         </div>
       </section>

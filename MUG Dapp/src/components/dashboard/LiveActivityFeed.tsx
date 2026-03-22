@@ -8,9 +8,11 @@ import { Skeleton } from '../ui/skeleton'
 type LiveActivityFeedProps = {
   transactions: FaucetTx[]
   isLoading?: boolean
+  symbol: string
+  decimals: number
 }
 
-export const LiveActivityFeed = ({ transactions, isLoading = false }: LiveActivityFeedProps) => {
+export const LiveActivityFeed = ({ transactions, isLoading = false, symbol, decimals }: LiveActivityFeedProps) => {
   const topItems = transactions.slice(0, 8)
 
   const iconMap = {
@@ -18,6 +20,12 @@ export const LiveActivityFeed = ({ transactions, isLoading = false }: LiveActivi
     Mint: BadgePlus,
     Transfer: ArrowRightLeft,
   }
+
+  const actionVerbMap = {
+    Claim: 'claimed',
+    Mint: 'minted',
+    Transfer: 'transferred',
+  } as const
 
   return (
     <Card>
@@ -43,6 +51,7 @@ export const LiveActivityFeed = ({ transactions, isLoading = false }: LiveActivi
             ) : (
               topItems.map((item) => {
                 const Icon = iconMap[item.action]
+                const actionVerb = actionVerbMap[item.action]
                 return (
                   <motion.div
                     key={`${item.hash}-${item.action}`}
@@ -56,7 +65,7 @@ export const LiveActivityFeed = ({ transactions, isLoading = false }: LiveActivi
                         <Icon size={14} />
                       </span>
                       <div>
-                        <p className="text-sm text-foreground">{shortenAddress(item.address)} claimed {formatToken(item.amount, 18, 2)} MUG</p>
+                        <p className="text-sm text-foreground">{shortenAddress(item.address)} {actionVerb} {formatToken(item.amount, decimals, 2)} {symbol}</p>
                         <p className="text-xs text-muted-foreground">{formatRelativeTime(item.timestamp)}</p>
                       </div>
                     </div>
