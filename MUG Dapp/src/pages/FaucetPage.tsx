@@ -1170,7 +1170,7 @@ export const FaucetPage = () => {
               {shortenAddress(CONTRACT_ADDRESS, 6)}
               <Copy size={13} />
             </button>
-            <a href="https://github.com/emejulucodes/mug-dapp" target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 transition-colors hover:bg-muted">
+            <a href="https://github.com/emejulucodes/MUG-Faucet" target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 transition-colors hover:bg-muted">
               <Github size={14} />
               GitHub
             </a>
