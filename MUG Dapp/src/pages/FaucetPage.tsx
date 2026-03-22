@@ -18,9 +18,18 @@ import { CONTRACT_ABI, CONTRACT_ADDRESS } from '../constants/contract'
 import { targetChain } from '../constants/wagmi'
 import { useFaucetData } from '../hooks/web3/use-faucet-data'
 import { useTheme } from '../providers/theme-provider'
+import type { FaucetTx } from '../types/faucet'
 import { formatToken, shortenAddress } from '../utils/format'
 
 const explorerUrl = targetChain.blockExplorers?.default.url ?? ''
+const TREND_WINDOW_SECONDS = 24 * 60 * 60
+
+const calculatePercentChange = (current: number, previous: number) => {
+  if (previous === 0) return current === 0 ? 0 : 100
+  return ((current - previous) / Math.abs(previous)) * 100
+}
+
+const formatTrendPercentage = (value: number) => `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`
 
 type StatValueProps = {
   value: number
@@ -51,7 +60,29 @@ const StatValue = ({ value, format = (next) => Math.round(next).toLocaleString()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value])
 
-  return <span>{format(display)}</span>
+  const displayText = format(display)
+  const finalText = format(value)
+
+  return (
+    <span className="relative inline-block whitespace-nowrap tabular-nums">
+      <span className="invisible">{finalText}</span>
+      <span className="absolute inset-0">{displayText}</span>
+    </span>
+  )
+}
+
+const LoadingDots = () => {
+  const [dotCount, setDotCount] = useState(1)
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setDotCount((current) => (current % 3) + 1)
+    }, 350)
+
+    return () => window.clearInterval(intervalId)
+  }, [])
+
+  return <span>{'.'.repeat(dotCount)}</span>
 }
 
 export const FaucetPage = () => {
@@ -425,14 +456,58 @@ export const FaucetPage = () => {
 
   const claimText = `${formatToken(faucet.claimAmount, faucet.decimals, 4)} ${faucet.symbol}`
   const userBalanceText = `${formatToken(faucet.userBalance, faucet.decimals, 4)} ${faucet.symbol}`
+  const isTransactionsPending = txQuery.isLoading || (txQuery.isFetching && txQuery.data === undefined)
 
   const transactions = useMemo(() => txQuery.data ?? [], [txQuery.data])
 
   const uniqueUsers = useMemo(() => new Set(transactions.map((tx) => tx.address.toLowerCase())).size, [transactions])
 
   const distributedNumber = useMemo(() => Number.parseFloat(formatToken(faucet.totalSupply, faucet.decimals, 3)), [faucet.decimals, faucet.totalSupply])
-  const contractBalanceNumber = useMemo(() => Number.parseFloat(formatToken(faucet.contractBalance ?? 0n, faucet.decimals, 3)), [faucet.contractBalance, faucet.decimals])
+  const remainingMintCapacityNumber = useMemo(() => {
+    const remainingSupply = faucet.maxSupply > faucet.totalSupply ? faucet.maxSupply - faucet.totalSupply : 0n
+    return Number.parseFloat(formatToken(remainingSupply, faucet.decimals, 3))
+  }, [faucet.decimals, faucet.maxSupply, faucet.totalSupply])
   const claimCount = useMemo(() => transactions.filter((tx) => tx.action === 'Claim').length, [transactions])
+
+  const trendMetrics = useMemo(() => {
+    const now = Math.floor(Date.now() / 1000)
+    const currentWindowStart = now - TREND_WINDOW_SECONDS
+    const previousWindowStart = currentWindowStart - TREND_WINDOW_SECONDS
+
+    const currentWindowTransactions = transactions.filter((tx) => tx.timestamp >= currentWindowStart)
+    const previousWindowTransactions = transactions.filter(
+      (tx) => tx.timestamp >= previousWindowStart && tx.timestamp < currentWindowStart,
+    )
+
+    const isSupplyAction = (tx: FaucetTx) => tx.action === 'Claim' || tx.action === 'Mint'
+    const toTokenValue = (amount: bigint) => Number.parseFloat(formatToken(amount, faucet.decimals, 6))
+
+    const distributedInWindow = (windowTransactions: FaucetTx[]) =>
+      windowTransactions
+        .filter(isSupplyAction)
+        .reduce((sum, tx) => sum + toTokenValue(tx.amount), 0)
+
+    const currentDistributed = distributedInWindow(currentWindowTransactions)
+    const previousDistributed = distributedInWindow(previousWindowTransactions)
+
+    const currentClaims = currentWindowTransactions.filter((tx) => tx.action === 'Claim').length
+    const previousClaims = previousWindowTransactions.filter((tx) => tx.action === 'Claim').length
+
+    const currentUsers = new Set(currentWindowTransactions.map((tx) => tx.address.toLowerCase())).size
+    const previousUsers = new Set(previousWindowTransactions.map((tx) => tx.address.toLowerCase())).size
+
+    const previousRemainingMintCapacity = remainingMintCapacityNumber + currentDistributed
+
+    return {
+      distributedTrend: calculatePercentChange(currentDistributed, previousDistributed),
+      claimTrend: calculatePercentChange(currentClaims, previousClaims),
+      activeUsersTrend: calculatePercentChange(currentUsers, previousUsers),
+      remainingMintCapacityTrend: calculatePercentChange(
+        remainingMintCapacityNumber,
+        previousRemainingMintCapacity,
+      ),
+    }
+  }, [transactions, faucet.decimals, remainingMintCapacityNumber])
 
   const statsStrip = [
     {
@@ -440,8 +515,8 @@ export const FaucetPage = () => {
       icon: Coins,
       value: distributedNumber,
       format: (value: number) => `${value.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${faucet.symbol}`,
-      trend: '+5.2%',
-      trendPositive: true,
+      trend: formatTrendPercentage(trendMetrics.distributedTrend),
+      trendPositive: trendMetrics.distributedTrend >= 0,
       note: 'All-time faucet output',
     },
     {
@@ -449,27 +524,29 @@ export const FaucetPage = () => {
       icon: Zap,
       value: claimCount,
       format: (value: number) => Math.round(value).toLocaleString(),
-      trend: '+8.1%',
-      trendPositive: true,
+      trend: formatTrendPercentage(trendMetrics.claimTrend),
+      trendPositive: trendMetrics.claimTrend >= 0,
       note: 'Claim count growth',
+      isLoading: isTransactionsPending,
     },
     {
       label: 'Active Users',
       icon: Users,
       value: uniqueUsers,
       format: (value: number) => Math.round(value).toLocaleString(),
-      trend: '+3.4%',
-      trendPositive: true,
+      trend: formatTrendPercentage(trendMetrics.activeUsersTrend),
+      trendPositive: trendMetrics.activeUsersTrend >= 0,
       note: 'Unique claiming wallets',
+      isLoading: isTransactionsPending,
     },
     {
-      label: 'Contract Balance',
-      value: contractBalanceNumber,
+      label: 'Remaining Mint Capacity',
+      value: remainingMintCapacityNumber,
       icon: Wallet,
       format: (value: number) => `${value.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${faucet.symbol}`,
-      trend: '-1.7%',
-      trendPositive: false,
-      note: 'Remaining faucet liquidity',
+      trend: formatTrendPercentage(trendMetrics.remainingMintCapacityTrend),
+      trendPositive: trendMetrics.remainingMintCapacityTrend >= 0,
+      note: 'Unminted supply before max cap',
     },
   ]
 
@@ -479,7 +556,7 @@ export const FaucetPage = () => {
   }
 
   return (
-    <main className="relative min-h-screen overflow-x-hidden bg-background text-foreground">
+    <main className="relative min-h-screen overflow-x-hidden bg-background pt-16 text-foreground">
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute -left-28 top-16 h-96 w-96 rounded-full bg-primary/25 blur-[80px]" />
         <div className="absolute right-6 top-44 h-[24rem] w-[24rem] rounded-full bg-secondary-accent/18 blur-[85px]" />
@@ -489,7 +566,7 @@ export const FaucetPage = () => {
         <div className="noise-overlay absolute inset-0 opacity-[0.07]" />
       </div>
 
-      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/70 backdrop-blur-xl">
+      <header className="fixed inset-x-0 top-0 z-50 border-b border-border/50 bg-background/55 backdrop-blur-xl">
         <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 md:px-6">
           <a href="#top" className="inline-flex items-center gap-2 text-sm font-semibold tracking-wide text-foreground">
             <span className="inline-flex h-10 w-35 items-center justify-center">
@@ -586,12 +663,22 @@ export const FaucetPage = () => {
                 </div>
                 <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{metric.label}</p>
                 <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
-                  <StatValue value={Number.isFinite(metric.value) ? metric.value : 0} format={metric.format} />
+                  {metric.isLoading ? (
+                    <span className="text-muted-foreground"><LoadingDots /></span>
+                  ) : (
+                    <StatValue value={Number.isFinite(metric.value) ? metric.value : 0} format={metric.format} />
+                  )}
                 </p>
-                <span className={`mt-2 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${metric.trendPositive ? 'border-success/40 bg-success/10 text-success' : 'border-danger/40 bg-danger/10 text-danger'}`}>
-                  {metric.trendPositive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                  {metric.trend}
-                </span>
+                {metric.isLoading ? (
+                  <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/30 px-2 py-0.5 text-[11px] text-muted-foreground">
+                    <LoadingDots />
+                  </span>
+                ) : (
+                  <span className={`mt-2 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${metric.trendPositive ? 'border-success/40 bg-success/10 text-success' : 'border-danger/40 bg-danger/10 text-danger'}`}>
+                    {metric.trendPositive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                    {metric.trend}
+                  </span>
+                )}
               </motion.div>
             ))}
           </div>
@@ -616,14 +703,24 @@ export const FaucetPage = () => {
                     <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
                       <stat.icon size={17} />
                     </span>
-                    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${stat.trendPositive ? 'border-success/40 bg-success/10 text-success' : 'border-danger/40 bg-danger/10 text-danger'}`}>
-                      {stat.trendPositive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                      {stat.trend}
-                    </span>
+                    {stat.isLoading ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/30 px-2 py-0.5 text-[11px] text-muted-foreground">
+                        <LoadingDots />
+                      </span>
+                    ) : (
+                      <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${stat.trendPositive ? 'border-success/40 bg-success/10 text-success' : 'border-danger/40 bg-danger/10 text-danger'}`}>
+                        {stat.trendPositive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                        {stat.trend}
+                      </span>
+                    )}
                   </div>
                   <p className="mt-3 text-[11px] uppercase tracking-[0.13em] text-muted-foreground">{stat.label}</p>
                   <p className="mt-2 text-2xl font-semibold text-foreground">
-                    <StatValue value={Number.isFinite(stat.value) ? stat.value : 0} format={stat.format} />
+                    {stat.isLoading ? (
+                      <span className="text-muted-foreground"><LoadingDots /></span>
+                    ) : (
+                      <StatValue value={Number.isFinite(stat.value) ? stat.value : 0} format={stat.format} />
+                    )}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">{stat.note}</p>
                 </div>
